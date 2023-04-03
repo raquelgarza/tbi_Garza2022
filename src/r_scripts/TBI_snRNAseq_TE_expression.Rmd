@@ -8,6 +8,10 @@ output:
 
 This Markdown encompass the code that was used to generate the TE expression related figures of the (manuscript)[https://doi.org/10.1101/2022.09.07.506982] titled: Single-cell transcriptomics of resected human traumatic brain injury tissues reveals acute activation of endogenous retroviruses in oligodendroglia.
 
+```{r, setup, include=FALSE}
+knitr::opts_knit$set(root.dir = '/Volumes/MyPassport/TBI/03.05.22/')
+```
+
 ## Load data
 ```{r}
 library(data.table)
@@ -16,8 +20,8 @@ library(RColorBrewer)
 library(Seurat)
 library(stringr)
 
-tbi <- readRDS("3_combinedUMAP_perCluster/tbi_per_condition_tbi.rds")
-control <- readRDS("3_combinedUMAP_perCluster/tbi_per_condition_control.rds")
+tbi <- readRDS("3_combinedUMAP_perCluster_QC_loose/new_rds/tbi_per_condition_tbi.rds")
+control <- readRDS("3_combinedUMAP_perCluster_QC_loose/new_rds/tbi_per_condition_control.rds")
 ```
 
 L1 barplots
@@ -27,8 +31,8 @@ DefaultAssay(tbi) <- "TE_norm_cluster_size"
 DefaultAssay(control) <- "TE_norm_cluster_size"
 
 # Read normalized matrices for both conditions
-control_TE_norm <- fread("3_combinedUMAP_perCluster/clusterPipeline_per_condition/TE_counts_normalized/multiple/control_TE_norm_cluster_size_matrix.csv", data.table = F)
-tbi_TE_norm <- fread("3_combinedUMAP_perCluster/clusterPipeline_per_condition/TE_counts_normalized/multiple/tbi_TE_norm_cluster_size_matrix.csv", data.table = F)
+control_TE_norm <- fread("3_combinedUMAP_perCluster_QC_loose/clusterPipeline/TE_counts_normalized/multiple/control_TE_norm_cluster_size_matrix.csv", data.table = F)
+tbi_TE_norm <- fread("3_combinedUMAP_perCluster_QC_loose/clusterPipeline/TE_counts_normalized/multiple/tbi_TE_norm_cluster_size_matrix.csv", data.table = F)
 
 # Pretty titles for celltypes (we will use this function later in the code)
 celltypes <- c(
@@ -49,9 +53,30 @@ celltypes <- c(
   "14" = "(14) Endothelial"
   )
 
+celltypes_simple <- c(
+  "0" = "Excitatory Neurons",
+  "1" = "Oligodendrocytes",
+  "2" = "Interneurons",
+  "3" = "Interneurons",
+  "4" = "Astrocytes",
+  "5" = "Excitatory Neurons",
+  "6" = "Excitatory Neurons",
+  "7" = "OPC",
+  "8" = "Microglia",
+  "9" = "Interneurons",
+  "10" = "?",
+  "11" = "?",
+  "12" = "?",
+  "13" = "Endothelial",
+  "14" = "Endothelial"
+  )
+
 celltypes_labeller <- function(value){
-  return(celltypes[value])
+  return(celltypes_simple[value])
 }
+
+tbi <- AddMetaData(tbi, metadata = celltypes_labeller(FetchData(tbi, "seurat_clusters")$seurat_clusters), col.name = "celltypes")
+control <- AddMetaData(control, metadata = celltypes_labeller(FetchData(control, "seurat_clusters")$seurat_clusters), col.name = "celltypes")
 
 TE_norm <- merge(tbi_TE_norm, control_TE_norm, by="te_id")
 TE_norm$te_subfamily <- sapply(str_split(TE_norm$te_id, ":"), `[[`, 1)
@@ -70,7 +95,10 @@ ltr5hs_tbi$data$condition <- "TBI"
 ltr5hs <- rbind(ltr5hs_control$data, 
       ltr5hs_tbi$data)
 colnames(ltr5hs)[4] <- "LTR5_HS"
-ggplot(ltr5hs, aes(x=UMAP_1, y=UMAP_2, colour=(LTR5_HS))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR5-HS")
+library(dplyr)
+ltr5hs %>%
+  arrange(LTR5_HS) %>%
+  ggplot(aes(x=UMAP_1, y=UMAP_2, colour=LTR5_HS)) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR5-HS")
 
 ltr5b_control <- FeaturePlot(control, features="LTR5B:ERVK:LTR")
 ltr5b_tbi <- FeaturePlot(tbi, features="LTR5B:ERVK:LTR")
@@ -79,7 +107,20 @@ ltr5b_tbi$data$condition <- "TBI"
 ltr5b <- rbind(ltr5b_control$data, 
       ltr5b_tbi$data)
 colnames(ltr5b)[4] <- "LTR5B"
-ggplot(ltr5b, aes(x=UMAP_1, y=UMAP_2, colour=(LTR5B))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR5B")
+ltr5b %>%
+  arrange(LTR5B) %>%
+ggplot(aes(x=UMAP_1, y=UMAP_2, colour=(LTR5B))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR5B")
+
+ltr5a_control <- FeaturePlot(control, features="LTR5A:ERVK:LTR")
+ltr5a_tbi <- FeaturePlot(tbi, features="LTR5A:ERVK:LTR")
+ltr5a_control$data$condition <- "Healthy"
+ltr5a_tbi$data$condition <- "TBI"
+ltr5a <- rbind(ltr5a_control$data, 
+      ltr5a_tbi$data)
+colnames(ltr5a)[4] <- "LTR5A"
+ltr5a %>%
+  arrange(LTR5A) %>%
+ggplot(aes(x=UMAP_1, y=UMAP_2, colour=(LTR5A))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR5A")
 
 ltr17_control <- FeaturePlot(control, features="LTR17:ERV1:LTR")
 ltr17_tbi <- FeaturePlot(tbi, features="LTR17:ERV1:LTR")
@@ -88,7 +129,20 @@ ltr17_tbi$data$condition <- "TBI"
 ltr17 <- rbind(ltr17_control$data, 
       ltr17_tbi$data)
 colnames(ltr17)[4] <- "LTR17"
-ggplot(ltr17, aes(x=UMAP_1, y=UMAP_2, colour=(LTR17))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR17")
+ltr17 %>%
+  arrange(LTR17) %>%
+ggplot(aes(x=UMAP_1, y=UMAP_2, colour=(LTR17))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR17")
+
+ltr7_control <- FeaturePlot(control, features="LTR7:ERV1:LTR")
+ltr7_tbi <- FeaturePlot(tbi, features="LTR7:ERV1:LTR")
+ltr7_control$data$condition <- "Healthy"
+ltr7_tbi$data$condition <- "TBI"
+ltr7 <- rbind(ltr7_control$data, 
+      ltr7_tbi$data)
+colnames(ltr7)[4] <- "LTR7"
+ltr7 %>%
+  arrange(LTR7) %>%
+ggplot(aes(x=UMAP_1, y=UMAP_2, colour=(LTR7))) + geom_point(size=0.5) + facet_wrap(.~condition) + theme_classic() + scale_color_gradient(low = "lightgray", high = "red") + labs(colour="Cluster expression\n(norm by num cells)") + theme(text=element_text(size=15)) + ggtitle("LTR7")
 ```
 
 ```{r}
@@ -111,6 +165,9 @@ ltrs_tbi_control$te_id <- sapply(str_split(ltrs_tbi_control$te_id, ":"), `[[`, 1
 # Order condition
 ltrs_tbi_control$condition <- factor(ltrs_tbi_control$condition, c("TBI", "Control"))
 
+celltypes_labeller <- function(value){
+  return(celltypes[value])
+}
 # Pretty-fy celltype/cluster labels
 ltrs_tbi_control$cluster_celltype <- as.vector(celltypes_labeller(ltrs_tbi_control$seurat_clusters))
 ltrs_tbi_control$cluster_celltype <- factor(ltrs_tbi_control$cluster_celltype, c("(0) Excitatory Neurons",

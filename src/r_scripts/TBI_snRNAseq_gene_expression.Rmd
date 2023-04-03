@@ -265,10 +265,11 @@ set.seed(6)
 tbi_seurat <- SetIdent(tbi_seurat, value="celltypes")
 celltypes <- as.character(unique(Idents(tbi_seurat)))
 deas_celltype <- sapply(as.character(celltypes), function(x) NULL)
+deas_celltype_filtered <- sapply(as.character(celltypes), function(x) NULL)
 for(celltype in as.character(celltypes)) deas_celltype[[celltype]] <- FindMarkers(tbi_seurat, group.by = "condition", ident.1 = "TBI", subset.ident = celltype)
 for(celltype in as.character(celltypes)) deas_celltype[[celltype]]$gene <- rownames(deas_celltype[[celltype]])
 for(celltype in as.character(celltypes)) rownames(deas_celltype[[celltype]]) <- NULL
-for(celltype in as.character(celltypes)) deas_celltype[[celltype]] <- deas_celltype[[celltype]][which(deas_celltype[[celltype]]$p_val_adj < 0.01),]
+for(celltype in as.character(celltypes)) deas_celltype_filtered[[celltype]] <- deas_celltype[[celltype]][which(deas_celltype[[celltype]]$p_val_adj < 0.01),]
 
 gse_dotplot <- function(dea){
   genelist <- bitr(rownames(dea), fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Hs.eg.db")
@@ -292,59 +293,119 @@ gse_dotplot <- function(dea){
 
 gses_celltype <- sapply(as.character(celltypes), function(x) NULL)
 for(celltype in as.character(celltypes)) rownames(deas_celltype[[celltype]]) <- deas_celltype[[celltype]]$gene
+for(celltype in as.character(celltypes)) rownames(deas_celltype_filtered[[celltype]]) <- deas_celltype_filtered[[celltype]]$gene
 
+gses_celltype_oligo <- read.xlsx("tables/GO_overrepresentation/seed_7/per_celltype/oligodendrocytes.xlsx")
+gses_celltype_oligo$sign <- ifelse(gses_celltype_oligo$enrichmentScore < 0, "Supressed", "Activated")
+gses_celltype_oligo$num_genes <- sapply(str_split(gses_celltype_oligo$core_enrichment, "/"), length)
+gses_celltype_oligo$gene_ratio <- gses_celltype_oligo$num_genes / gses_celltype_oligo$setSize
+gses_celltype_oligo$Description <- factor(gses_celltype_oligo$Description, levels = gses_celltype_oligo[order(gses_celltype_oligo$gene_ratio),"Description"])
+gses_celltype_oligo <- gses_celltype_oligo[which(gses_celltype_oligo$ONTOLOGY == "BP"),]
+gses_celltype_oligo$celltype <- "oligodendrocytes"
+
+gses_celltype_opc <- read.xlsx("tables/GO_overrepresentation/seed_7/per_celltype/OPC.xlsx")
+gses_celltype_opc$sign <- ifelse(gses_celltype_opc$enrichmentScore < 0, "Supressed", "Activated")
+gses_celltype_opc$num_genes <- sapply(str_split(gses_celltype_opc$core_enrichment, "/"), length)
+gses_celltype_opc$gene_ratio <- gses_celltype_opc$num_genes / gses_celltype_opc$setSize
+gses_celltype_opc$Description <- factor(gses_celltype_opc$Description, levels = gses_celltype_opc[order(gses_celltype_opc$gene_ratio),"Description"])
+gses_celltype_opc <- gses_celltype_opc[which(gses_celltype_opc$ONTOLOGY == "BP"),]
+gses_celltype_opc$celltype <- "OPC"
+
+gses_celltype <- rbind(gses_celltype,
+                       gses_celltype_opc)
+
+insert_new_lines <- function(str, n) {gsub(paste0("([^ ]+( +[^ ]+){",n-1,"}) +"),
+                              "\\1\n", str)}
+gses_celltype$Description <- insert_new_lines(gses_celltype$Description, 3)
+gses_celltype$Description <- factor(gses_celltype$Description, levels = unique(gses_celltype[order(gses_celltype$celltype, gses_celltype$gene_ratio),"Description"]))
+# pdf("gsea_oligodendroglia.pdf", height=7, width = 12)
+ggplot(gses_celltype, aes(x=Description, y=gene_ratio, size = num_genes, fill = p.adjust)) + geom_point(shape=21, colour="lightgrey") + facet_wrap(.~sign+celltype) + coord_flip() + theme_pubr(legend = "right", border = T) + labs(x="", fill="Padj", y = "Gene ratio", size = "Num genes") + scale_fill_gradientn(colors = c("firebrick1", "gray94")) + scale_size_continuous(range = c(2,15)) + theme(axis.text.y = element_text(size=15),
+                                                                                                                                                                                                                                                                                                                                                                                                            strip.text.x = element_text(size = 15),
+                                                                                                                                                                                                                                                                                                                                                                                                            axis.text.x = element_text(size=15),
+                                                                                                                                                                                                                                                                                                                                                                                                            legend.text = element_text(size=15),
+                                                                                                                                                                                                                                                                                                                                                                                                            legend.title = element_text(size=16)) 
+# dev.off()
 
 # Saved the results to xlsx at tables/GO_overrepresentation/seed_7/per_celltype/
-# gses_celltype$`Excitatory Neurons` <- gse_dotplot(deas_celltype$`Excitatory Neurons`)
-# gses_celltype$Interneurons <- gse_dotplot(deas_celltype$Interneurons)
-# gses_celltype$Oligodendrocytes <- gse_dotplot(deas_celltype$Oligodendrocytes)
-# gses_celltype$OPC <- gse_dotplot(dea=deas_celltype$OPC)
-# gses_celltype$Microglia <- gse_dotplot(dea=deas_celltype$Microglia)
-# gses_celltype$Astrocytes <- gse_dotplot(deas_celltype$Astrocytes)
-# gses_celltype$Endothelial <- gse_dotplot(deas_celltype$Endothelial) 
-# gses_celltype$`?` <- gse_dotplot(deas_celltype$`?`)
+# gses_celltype$`Excitatory Neurons` <- gse_dotplot(deas_celltype_filtered$`Excitatory Neurons`)
+# gses_celltype$Interneurons <- gse_dotplot(deas_celltype_filtered$Interneurons)
+# gses_celltype$Oligodendrocytes <- gse_dotplot(deas_celltype_filtered$Oligodendrocytes)
+# gses_celltype$OPC <- gse_dotplot(dea=deas_celltype_filtered$OPC)
+# gses_celltype$Microglia <- gse_dotplot(dea=deas_celltype_filtered$Microglia)
+# gses_celltype$Astrocytes <- gse_dotplot(deas_celltype_filtered$Astrocytes)
+# gses_celltype$Endothelial <- gse_dotplot(deas_celltype_filtered$Endothelial) 
+# gses_celltype$`?` <- gse_dotplot(deas_celltype_filtered$`?`)
 ```
 Saved the results to xlsx at tables/GO_overrepresentation/seed_7/per_celltype/
 
 ### Overrepresented terms in oligodendrocytes
 ```{r}
 gses_celltype_oligos <- read.xlsx("tables/GO_overrepresentation/seed_7/per_celltype/oligodendrocytes.xlsx")
-# It really is just all the activated terms, but just to be clear
-response_genes_oligos <- unique(unlist(str_split(gses_celltype_oligos[which(gses_celltype_oligos$Description %in% c("response to interferon-gamma", "cellular response to interferon-gamma", "cellular response to cytokine stimulus", "response to cytokine", "innate immune response", "interferon-gamma-mediated signaling pathway", "defense response")),"core_enrichment"], "/")))
+
+response_genes_oligos <- gses_celltype_oligos[which(gses_celltype_oligos$enrichmentScore > 0),]
+# response_genes_oligos <- gses_celltype_oligos[which(gses_celltype_oligos$Description == "interferon-gamma-mediated signaling pathway"),]
+response_genes_oligos <- unique(unlist(str_split(response_genes_oligos$core_enrichment, "/")))
 response_genes_oligos <- bitr(response_genes_oligos, fromType="ENTREZID", toType="SYMBOL", OrgDb="org.Hs.eg.db", drop = F)
 
+response_genes_oligodendroglia <- unique(c(response_genes_oligos$SYMBOL))
 tbi_seurat <- ScaleData(tbi_seurat, rownames(tbi_seurat))
-ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl")
-gene.data <- getBM(attributes=c('hgnc_symbol'),
-                   filters = 'go', values = gses_celltype_oligos$ID, mart = ensembl)
+gene.data <- response_genes_oligodendroglia[which(response_genes_oligodendroglia %in% c(deas_celltype_filtered$Oligodendrocytes[which(deas_celltype_filtered$Oligodendrocytes$avg_log2FC > 0),"gene"]))]
 
-tmp <- DoHeatmap(tbi_seurat, features = gene.data$hgnc_symbol)
+tmp <- DoHeatmap(subset(tbi_seurat, celltypes %in% c("Oligodendrocytes", "OPC", "Astrocytes", "Microglia", "Excitatory Neurons", "Interneurons", "Endothelial", "?")), features = gene.data)# $hgnc_symbol
 tmp_df <- reshape2::dcast(tmp$data[,1:3], formula= Feature~Cell, value.var = "Expression")
 rownames(tmp_df) <- tmp_df$Feature
 tmp_df <- tmp_df[,-1]
-annotation_col <- FetchData(tbi_seurat, vars = c("condition", "celltypes"))
+annotation_col <- FetchData(tbi_seurat, vars = c("condition", "celltypes", "time"))
 annotation_col <- annotation_col[order(annotation_col$celltypes, annotation_col$condition),,drop=F]
 annotation_col <- annotation_col[which(rownames(annotation_col) %in% colnames(tmp_df)),, drop=F]
 annotation_col$celltypes <- factor(annotation_col$celltypes, levels = c("Oligodendrocytes", "OPC", "Astrocytes", "Microglia", "Excitatory Neurons", "Interneurons", "Endothelial", "?"))
-
-col.pal <- colorRampPalette(colors = c("lightgrey", "white", "#2d518a"))(50)
+annotation_col <- annotation_col[order(annotation_col$celltypes, annotation_col$condition, annotation_col$time),]
+annotation_col$time <- as.factor(annotation_col$time)
+col.pal <- colorRampPalette(colors = c("lightgrey", "white", "#2d518a"))(60)
 # Takes forever to plot... 
-# pheatmap(tmp_df[,rownames(annotation_col)], cluster_cols = F, show_rownames = F, cluster_rows = T,  show_colnames = F, color = col.pal, annotation_col = annotation_col, gaps_col = c(which(!duplicated(paste(annotation_col$condition, annotation_col$celltypes)))[-1]-1, rep(which(!duplicated(annotation_col$celltypes))[-1]-1, 3)))
+# png("heatmap_immune.png", res = 350, width = 5000, height = 800)
+# pdf("heatmap_immune.pdf", width=50)
+pheatmap(tmp_df[,rownames(annotation_col)], cluster_cols = F, show_rownames = F, cluster_rows = T,  show_colnames = F, color = col.pal, annotation_col = annotation_col, 
+         gaps_col = c(which(!duplicated(paste(annotation_col$condition, annotation_col$celltypes)))[-1]-1, rep(which(!duplicated(annotation_col$celltypes))[-1]-1, 3)),
+         fontsize = 7, 
+           annotation_colors = list("condition" = c("Control" = "#BFBFBF",
+                                                    "TBI" = "#D493C0"),
+                                    "celltypes" = c("Oligodendrocytes" = "#BDA6CD",
+                                                    "OPC" = "#7F6791",
+                                                    "Astrocytes" = "#92C876",
+                                                    "Microglia" = "#ED7B29",
+                                                    "Excitatory Neurons" = "#6FC7D4",
+                                                    "Interneurons" = "#5DA19A",
+                                                    "Endothelial" = "#D2724B",
+                                                    "?" = "#96979A"),
+                                    "time" = c("4" = "#BEA7CC",
+                                               "9" = "#AA91BC",
+                                               "24" = "#947AA9",
+                                               "42" = "#72578B",
+                                               "57" = "#564174",
+                                               "84" = "#40305B",
+                                               "106" = "#2F2247",
+                                               "180" = "#1D1532",
+                                               "192" = "#181425")), treeheight_row = 0)
+# dev.off()
+
 ```
 
 ### Immune related enrichment
 
 #### Enrichment score per cell type
 ```{r}
-features <- list("immune_response_oligos" = response_genes_oligos$SYMBOL)
+features <- list("immune_response_oligos" = gene.data)
 tbi_seurat <- AddModuleScore(tbi_seurat, features = features, name = c("immune_response_oligos"), assay = "RNA", ctrl=5)
 tmp <- VlnPlot(tbi_seurat, features = "immune_response_oligos1", group.by = "celltypes", split.by = "condition", pt.size = 0) 
 
+# pdf("violin_enrichment_immune.pdf", width = 17, height = 3)
 ggplot(tmp$data, aes(x=split, y=immune_response_oligos1, fill=split)) + geom_violin() + facet_wrap(.~ident, scales = "free_x", ncol = 8) + theme(axis.title.x=element_blank(),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank()) + 
-  theme_classic() + geom_boxplot(width=0.1, color="black", alpha=0.2) +
+  ggmin::theme_powerpoint() + geom_boxplot(width=0.1, color="black", alpha=0.2) +
   geom_hline(yintercept = 0, linetype="dashed", colour="red") + labs(y="Enrichment score", x="")
+# dev.off()
 ```
 
 #### Enrichment score in oligodendrocytes per time post injury
@@ -358,6 +419,8 @@ padj_genes <- rbind(deas_celltype$Oligodendrocytes["STAT1", "p_val_adj", drop=F]
                     deas_celltype$Oligodendrocytes["STAT2", "p_val_adj", drop=F],
                     deas_celltype$Oligodendrocytes["IRF1", "p_val_adj", drop=F],
                     deas_celltype$Oligodendrocytes["PARP14", "p_val_adj", drop=F],
+                    deas_celltype$Oligodendrocytes["PARP12", "p_val_adj", drop=F],
+                    deas_celltype$Oligodendrocytes["PARP9", "p_val_adj", drop=F],
                     deas_celltype$Oligodendrocytes["NLRC5", "p_val_adj", drop=F],
                     deas_celltype$Oligodendrocytes["CIITA", "p_val_adj", drop=F],
                     deas_celltype$Oligodendrocytes["IFI16", "p_val_adj", drop=F])
@@ -365,89 +428,135 @@ padj_genes$p_val_adj <- ifelse(padj_genes$p_val_adj > 0.05 | is.na(padj_genes$p_
 library(ggpubr)
 ggarrange(VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("STAT1"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red") + geom_text(x=1.5, y=3, label=padj_genes["STAT1","p_val_adj"]),
           VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("STAT2"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red") + geom_text(x=1.5, y=3, label=padj_genes["STAT2","p_val_adj"]),
-          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("IRF1"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3, label=padj_genes["IRF1","p_val_adj"]),
-          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("PARP14"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3, label=padj_genes["PARP14","p_val_adj"]),
-          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("NLRC5"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3, label=padj_genes["NLRC5","p_val_adj"]),
-          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("CIITA"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3, label=padj_genes["CIITA","p_val_adj"]),
-          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("IFI16"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")+ geom_text(x=1.5, y=3, label=padj_genes["IFI16","p_val_adj"]), ncol=4, nrow=2)
+          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("NLRC5"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3, label=padj_genes["NLRC5","p_val_adj"]), ncol=5, nrow=2)
+
+
+# pdf("violin_oligodendrocytes_ifn.pdf", height = 3, width = 12)
+ggarrange(VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("IRF1"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3.5, label=padj_genes["IRF1","p_val_adj"]),
+          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("IFI16"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")+ geom_text(x=1.5, y=3, label=padj_genes["IFI16","p_val_adj"]),
+          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("PARP9"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=3, label=padj_genes["PARP9","p_val_adj"]),
+          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("PARP12"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2.3, label=padj_genes["PARP12","p_val_adj"]),
+          VlnPlot(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("PARP14"), pt.size = 0.3, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=4, label=padj_genes["PARP14","p_val_adj"]), ncol=5, nrow=1)
+# dev.off()
 ```
 
 ### MHC molecules in oligodendrocytes
 ```{r}
-tmp <- DoHeatmap(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1"))
-tmp_df <- reshape2::dcast(tmp$data[,1:3], formula= Feature~Cell, value.var = "Expression")
+tbi_seurat <- ScaleData(tbi_seurat, features = rownames(tbi_seurat))
+tmp <- DoHeatmap(subset(tbi_seurat, celltypes %in% c("Oligodendrocytes", "OPC")), features = c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1",
+                                                                                               "MYO1E",  "PSMB9", "TAPBP", "NLRC5"))
+tmp_df <- reshape2::dcast(tmp$data, formula= Feature~Cell, value.var = "Expression")
 rownames(tmp_df) <- tmp_df$Feature
 tmp_df <- tmp_df[,-1]
-annotation_col <- FetchData(tbi_seurat, vars = c("condition"))
-annotation_col <- annotation_col[order(annotation_col$condition),,drop=F]
+annotation_col <- FetchData(tbi_seurat, vars = c("condition", "celltypes", "time"))
+annotation_col <- annotation_col[order(annotation_col$condition, annotation_col$celltypes, annotation_col$time),,drop=F]
 annotation_col <- annotation_col[which(rownames(annotation_col) %in% colnames(tmp_df)),, drop=F]
-col.pal <- RColorBrewer::brewer.pal(9, "Reds")
+annotation_col$time <- as.factor(annotation_col$time)
+col.pal <- RColorBrewer::brewer.pal(9, "Blues")
 
-pheatmap(tmp_df[c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1"), rownames(annotation_col)], cluster_cols = F, cluster_rows = F,  show_colnames = F, color = col.pal, annotation_col = annotation_col)
+annotation_row <- data.frame(gene = c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1", "MYO1E",  "PSMB9", "TAPBP", "NLRC5"),
+           type = c(rep("molecule", 10), rep("regulator", 4)))
+rownames(annotation_row) <- annotation_row$gene
+annotation_row <- annotation_row[,"type",drop=F]
+annotation_row <- annotation_row[order(annotation_row$type),,drop=F]
+# pdf("oligodendroglia_heatmap_adaptive_immune_short.pdf")
+# png("oligodendroglia_heatmap_adaptive_immune_short.png", res = 350, width = 1500, height = 800)
+pheatmap(tmp_df[rownames(annotation_row),rownames(annotation_col)], cluster_cols = F, show_rownames = T, cluster_rows = F,  show_colnames = F, color = col.pal, annotation_col = annotation_col, gaps_col =which(!duplicated(annotation_col))[3]-1, fontsize = 7, gaps_row = 10,
+         annotation_colors = list("condition" = c("Control" = "#BFBFBF",
+                                                  "TBI" = "#D493C0"),
+                                  "celltypes" = c("Oligodendrocytes" = "#BDA6CD",
+                                                  "OPC" = "#7F6791"),
+                                  "time" = c("4" = "#BEA7CC",
+                                             "9" = "#AA91BC",
+                                             "24" = "#947AA9",
+                                             "42" = "#72578B",
+                                             "57" = "#564174",
+                                             "84" = "#40305B",
+                                             "106" = "#2F2247",
+                                             "180" = "#1D1532",
+                                             "192" = "#181425")), treeheight_row = 0)
+# dev.off()
 ```
 
-### MHC regulators in oligodendrocytes 
+### MHC moleculesin all cell types
 ```{r}
-tmp <- DoHeatmap(subset(tbi_seurat, celltypes == "Oligodendrocytes"), features = c("MYO1E", "KIF5B", "PIP5K1A", "PSMB8", "PSMB9", "TAP1", "TAP2", "CD86", "CD80", "CD74", "CIITA", "NLRC5"))
-tmp_df <- reshape2::dcast(tmp$data[,1:3], formula= Feature~Cell, value.var = "Expression")
+tmp <- DoHeatmap(tbi_seurat, features = c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1"))
+tmp_df <- reshape2::dcast(tmp$data, formula= Feature~Cell, value.var = "Expression")
 rownames(tmp_df) <- tmp_df$Feature
 tmp_df <- tmp_df[,-1]
-annotation_col <- FetchData(tbi_seurat, vars = c("condition", "time"))
-annotation_col <- annotation_col[order(annotation_col$condition, annotation_col$time),,drop=F]
+annotation_col <- FetchData(tbi_seurat, vars = c("condition", "celltypes", "time"))
+annotation_col$celltypes <- factor(annotation_col$celltypes, levels = c("Oligodendrocytes", "OPC", "Astrocytes", "Microglia", "Excitatory Neurons", "Interneurons", "Endothelial", "?"))
+annotation_col <- annotation_col[order(annotation_col$celltypes,annotation_col$condition, annotation_col$time),,drop=F]
 annotation_col <- annotation_col[which(rownames(annotation_col) %in% colnames(tmp_df)),, drop=F]
 annotation_col$time <- as.factor(annotation_col$time)
 
-pheatmap(tmp_df[c("MYO1E", "KIF5B", "PIP5K1A", "PSMB8", "PSMB9", "TAP1", "TAP2", "CD86", "CD80", "CD74", "CIITA", "NLRC5"), rownames(annotation_col)], cluster_cols = F, cluster_rows = F,  show_colnames = F, color = col.pal, annotation_col = annotation_col)
+col.pal <- RColorBrewer::brewer.pal(9, "Blues")
+
+# png("heatmap_adaptive_immune.png", res = 350, width = 5000, height = 800)
+# pdf("heatmap_adaptive_immune.pdf", width=50)
+pheatmap(tmp_df[,rownames(annotation_col)], cluster_cols = F, show_rownames = F, cluster_rows = T,  show_colnames = F, color = col.pal, annotation_col = annotation_col, 
+         gaps_col = c(which(!duplicated(paste(annotation_col$condition, annotation_col$celltypes)))[-1]-1, rep(which(!duplicated(annotation_col$celltypes))[-1]-1, 3)),
+         fontsize = 7, 
+           annotation_colors = list("condition" = c("Control" = "#BFBFBF",
+                                                    "TBI" = "#D493C0"),
+                                    "celltypes" = c("Oligodendrocytes" = "#BDA6CD",
+                                                    "OPC" = "#7F6791",
+                                                    "Astrocytes" = "#92C876",
+                                                    "Microglia" = "#ED7B29",
+                                                    "Excitatory Neurons" = "#6FC7D4",
+                                                    "Interneurons" = "#5DA19A",
+                                                    "Endothelial" = "#D2724B",
+                                                    "?" = "#96979A"),
+                                    "time" = c("4" = "#BEA7CC",
+                                               "9" = "#AA91BC",
+                                               "24" = "#947AA9",
+                                               "42" = "#72578B",
+                                               "57" = "#564174",
+                                               "84" = "#40305B",
+                                               "106" = "#2F2247",
+                                               "180" = "#1D1532",
+                                               "192" = "#181425")), treeheight_row = 0)
+# dev.off()
+```
+
+#### Enrichment score per cell type adaptive immunity
+```{r}
+features <- list("hla" = c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1"))
+tbi_seurat <- AddModuleScore(tbi_seurat, features = features, name = c("hla"), assay = "RNA", ctrl=5)
+tmp <- VlnPlot(tbi_seurat, features = "hla1", group.by = "celltypes", split.by = "condition", pt.size = 0) 
+
+# pdf("violin_enrichment_hla.pdf", width = 17, height = 3)
+ggplot(tmp$data, aes(x=split, y=hla1, fill=split)) + geom_violin() + facet_wrap(.~ident, scales = "free_x", ncol = 8) + theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) + 
+  ggmin::theme_powerpoint() + geom_boxplot(width=0.1, color="black", alpha=0.2) +
+  geom_hline(yintercept = 0, linetype="dashed", colour="red") + labs(y="Enrichment score", x="")
+# dev.off()
 ```
 
 ### Violin plots: Gene expression in OPCs (STAT1, 2, NLRC5...)
 ```{r}
 padj_genes <- rbind(deas_celltype$OPC["STAT1", "p_val_adj", drop=F],
                     deas_celltype$OPC["STAT2", "p_val_adj", drop=F],
-                    deas_celltype$OPC["IRF3", "p_val_adj", drop=F],
+                    deas_celltype$OPC["IRF1", "p_val_adj", drop=F],
                     deas_celltype$OPC["PARP14", "p_val_adj", drop=F],
                     deas_celltype$OPC["NLRC5", "p_val_adj", drop=F],
                     deas_celltype$OPC["CIITA", "p_val_adj", drop=F],
-                    deas_celltype$OPC["IFI16", "p_val_adj", drop=F])
+                    deas_celltype$OPC["IFI16", "p_val_adj", drop=F],
+                    deas_celltype$OPC["PARP9", "p_val_adj", drop=F],
+                    deas_celltype$OPC["PAR12", "p_val_adj", drop=F])
 
 ggarrange(VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("STAT1"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red") + geom_text(x=1.5, y=2, label=formatC(padj_genes["STAT1","p_val_adj"], format = "e", digits = 2)),
           VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("STAT2"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red") + geom_text(x=1.5, y=2, label=formatC(padj_genes["STAT2","p_val_adj"], format = "e", digits = 2)),
-          VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("IRF3"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["IRF3","p_val_adj"], format = "e", digits = 2)),
+          VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("IRF1"), pt.size = 0.1, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["IRF1","p_val_adj"], format = "e", digits = 2)),
           VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("PARP14"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["PARP14","p_val_adj"], format = "e", digits = 2)),
+          VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("PARP14"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["PARP12","p_val_adj"], format = "e", digits = 2)),
+          VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("PARP14"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["PARP9","p_val_adj"], format = "e", digits = 2)),
           VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("NLRC5"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["NLRC5","p_val_adj"], format = "e", digits = 2)),
-          VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("CIITA"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["CIITA","p_val_adj"], format = "e", digits = 2)),
+          VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("CIITA"), pt.size = 0.1, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")  + geom_text(x=1.5, y=2, label=formatC(padj_genes["CIITA","p_val_adj"], format = "e", digits = 2)),
           VlnPlot(subset(tbi_seurat, celltypes == "OPC"), features = c("IFI16"), pt.size = 0, group.by = "condition") + theme(legend.position = "None") + stat_summary(fun = mean, geom='point', size = 1, color="red")+ geom_text(x=1.5, y=2, label=formatC(padj_genes["IFI16","p_val_adj"], format = "e", digits = 2)), ncol=4, nrow=2)
 ```
 
-### OPCs - MHC molecules
-```{r}
-tmp <- DoHeatmap(subset(tbi_seurat, celltypes == "OPC"), features = c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1"))
-tmp_df <- reshape2::dcast(tmp$data[,1:3], formula= Feature~Cell, value.var = "Expression")
-rownames(tmp_df) <- tmp_df$Feature
-tmp_df <- tmp_df[,-1]
-annotation_col <- FetchData(tbi_seurat, vars = c("condition", "time"))
-annotation_col <- annotation_col[order(annotation_col$condition, annotation_col$time),,drop=F]
-annotation_col <- annotation_col[which(rownames(annotation_col) %in% colnames(tmp_df)),, drop=F]
-annotation_col$time <- as.factor(annotation_col$time)
-col.pal <- RColorBrewer::brewer.pal(9, "Reds")
-
-pheatmap(tmp_df[c("HLA-A", "HLA-B", "HLA-C", "HLA-E", "HLA-F", "HLA-DMA", "HLA-DOB", "HLA-DRA", "HLA-DQB1", "HLA-DPA1"), rownames(annotation_col)], cluster_cols = F, cluster_rows = F,  show_colnames = F, color = col.pal, annotation_col = annotation_col)
-```
-
-### OPCs - MHC regulators 
-```{r}
-tmp <- DoHeatmap(subset(tbi_seurat, celltypes == "OPC"), features = c("MYO1E", "KIF5B", "PIP5K1A", "PSMB8", "PSMB9", "TAP1", "TAP2", "CD86", "CD80", "CD74", "CIITA", "NLRC5"))
-tmp_df <- reshape2::dcast(tmp$data[,1:3], formula= Feature~Cell, value.var = "Expression")
-rownames(tmp_df) <- tmp_df$Feature
-tmp_df <- tmp_df[,-1]
-annotation_col <- FetchData(tbi_seurat, vars = c("condition", "time"))
-annotation_col <- annotation_col[order(annotation_col$condition, annotation_col$time),,drop=F]
-annotation_col <- annotation_col[which(rownames(annotation_col) %in% colnames(tmp_df)),, drop=F]
-annotation_col$time <- as.factor(annotation_col$time)
-
-pheatmap(tmp_df[c("MYO1E", "KIF5B", "PIP5K1A", "PSMB8", "PSMB9", "TAP1", "TAP2", "CD86", "CD80", "CD74", "CIITA", "NLRC5"), rownames(annotation_col)], cluster_cols = F, cluster_rows = F,  show_colnames = F, color = col.pal, annotation_col = annotation_col)
-
-```
 <!-- ## From here on is the analysis without Frontal 3 - reviewers comments ### -->
 <!-- ### GSEA - Pooling cell types together -->
 <!-- ```{r collapse=TRUE} -->
